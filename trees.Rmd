@@ -1,0 +1,127 @@
+---
+title: "Training a personal activity predictor"
+author: "Jorge Monforte González"
+date: "28 de julio de 2016"
+output: html_document
+---
+
+## Preparing the data
+First we load the data from the files.
+
+```{r load_data,cache=TRUE}
+
+training.base <- read.csv('pml-training.csv')
+testing.base <- read.csv('pml-testing.csv')
+
+```
+
+We need to remove the columns that are filled with NAs. 
+With this function we find them in the dataset.
+
+```{r na_columns,cache=T}
+
+# This function lists the columns that are plenty of NA elements so they can be removed
+get_na_columns <- function(df) {
+  r <- NULL
+  for (i in 1:ncol(df)) {
+    c <- df[,i]
+    if (all(is.na(c))) {
+      r <- c(r, i)
+    }
+  }
+  r
+}
+```
+
+There are columns that present div by 0 errors, I have chosen to eliminate them as they are nearly empty and there are still a lot of other columns with valuable data. For this 
+
+```{r div_0_columns,cache=T}
+# Remove spurious columns
+div0_level <- "#DIV/0!"
+
+# This function lists columns with div/0 entries to be removed
+get_div0_columns <- function(df) {
+  columns <- NULL
+  for (cnum in seq(1,ncol(df))) {
+    col <- df[,cnum]
+    if (is.factor(col) & div0_level %in% levels(col))
+      columns <- c(columns, cnum)
+  }
+  columns
+}
+```
+
+We now use these functions to remove these columns and others in the beginning of the set that are mostly row metadata.
+
+```{r data_cleaning,dependson=c("load_data","na_columns","div0_columns"),cache=TRUE}
+metadata_columns <- 1:7
+div_0_columns <- get_div0_columns(training.base)
+testing_na_columns <- get_na_columns(testing.base)
+problem_id_column <- 160
+
+training.clean <- training.base[,-1*c(metadata_columns, 
+                                    div_0_columns, testing_na_columns)]
+testing.clean <- testing.base[,-1*c(metadata_columns, 
+                                    div_0_columns, testing_na_columns, problem_id_column)]
+
+```
+
+Now that we have the training dataset clean we can extract the features and the outcomes in different objects to feed the algorithm.
+
+```{r data_preparation,cache=T,dependson="data_cleaning"}
+
+
+# The name of the colum where the target values are stored
+classe_column <- which(names(training.clean) == 'classe')
+
+features <- training.clean[,-classe_column]
+outcomes<- training.clean[,classe_column]
+
+
+```
+
+
+## Random Forest model
+We will first try to fit a random forest, for this we will use the k-fold partition method partitioning the data in 10 folds and using each of the folds once as **cross validation** set in each iteration.
+
+
+```{r random_forest,dependson="data_preparation",cache=T,message=F,warning=F}
+# We are splitting the data in 10 different folds
+folds <- 10
+
+set.seed(123)
+seeds <- vector(mode="list", length=folds+1)
+for(i in 1:folds) seeds[[i]] <- sample.int(floor(sqrt(ncol(features))))
+seeds[[folds + 1]]<-sample.int(1000, 1)
+
+tc <- trainControl(method="cv", repeats=1,seeds=seeds,index=createFolds(outcomes,k=folds))
+library(doParallel)
+
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+
+fit <- train(outcomes ~ ., data=features, method="rf", trControl=tc)
+
+stopCluster(cl)
+```
+
+After training the model returns a model fit with very low classification errors so we can keep this model and we dont need to train anything else different, as we can see in the confusion matrix.
+
+```{r random_forest_confusion_matrix,dependson="random_forest", echo=F}
+fit$finalModel$confusion
+```
+
+The model is fitted very fast and after the first 100 trees we cant see any improvement.
+
+```{r random_forest_plot,echo=F,dependson=c("random_forest","data_preparation")}
+plot(fit$finalModel, main="Random forest training error rates")
+```
+
+# Predict the provided testing data
+
+With the model we can now predict the testing values and we get a 100% accuracy with these values.
+
+```{r testing_table, echo=F, message=F, warning=F}
+df <- data.frame(num=1:nrow(testing.clean), values=predict(fit,testing.clean))
+knitr::kable(df)
+```
