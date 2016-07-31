@@ -5,6 +5,9 @@ date: "28 de julio de 2016"
 output: html_document
 ---
 
+## Abstract
+In this paper we will see how to fit a random forest classification algorithm to allow the prediction of the activity in base a dataset of previously recorded data.
+
 ## Preparing the data
 First we load the data from the files.
 
@@ -69,15 +72,11 @@ testing.clean <- testing.base[,-1*c(metadata_columns,
 Now that we have the training dataset clean we can extract the features and the outcomes in different objects to feed the algorithm.
 
 ```{r data_preparation,cache=T,dependson="data_cleaning"}
-
-
 # The name of the colum where the target values are stored
 classe_column <- which(names(training.clean) == 'classe')
 
 features <- training.clean[,-classe_column]
 outcomes<- training.clean[,classe_column]
-
-
 ```
 
 
@@ -86,7 +85,10 @@ We will first try to fit a random forest, for this we will use the k-fold partit
 
 
 ```{r random_forest,dependson="data_preparation",cache=T,message=F,warning=F}
+
+library(caret)
 # We are splitting the data in 10 different folds
+
 folds <- 10
 
 set.seed(123)
@@ -113,7 +115,7 @@ fit$finalModel$confusion
 
 The model is fitted very fast and after the first 100 trees we cant see any improvement.
 
-```{r random_forest_plot,echo=F,dependson=c("random_forest","data_preparation")}
+```{r random_forest_plot,echo=F,dependson=c("random_forest")}
 plot(fit$finalModel, main="Random forest training error rates")
 ```
 
@@ -121,7 +123,7 @@ plot(fit$finalModel, main="Random forest training error rates")
 
 With the model we can now predict the testing values and we get a 100% accuracy with these values.
 
-```{r testing_table, echo=F, message=F, warning=F}
+```{r testing_table, depends_on="random_forest", echo=F, message=F, warning=F}
 df <- data.frame(num=1:nrow(testing.clean), values=predict(fit,testing.clean))
 knitr::kable(df)
 ```
